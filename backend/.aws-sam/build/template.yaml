@@ -1,0 +1,383 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'pets_backend SAM Template for pets_backend
+
+  '
+Resources:
+  PetsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PetsTable
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+  AdoptionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AdoptionsTable
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+  PetsInterestTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: PetsInterestTable
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+  PetsAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: '''GET,POST,OPTIONS'''
+        AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+        AllowOrigin: '''*'''
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn:
+              Fn::GetAtt:
+              - CognitoUserPool
+              - Arn
+  GetPetsLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetPetsLambda
+      Handler: getPets.lambda_handler
+      Runtime: python3.10
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          PETS_TABLE:
+            Ref: PetsTable
+      Events:
+        GetPetsApi:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: PetsAPI
+            Path: /pets
+            Method: get
+    Metadata:
+      SamResourceId: GetPetsLambda
+  GetAdoptionsLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetAdoptionsLambda
+      Handler: getAdoptions.lambda_handler
+      Runtime: python3.10
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          ADOPTIONS_TABLE:
+            Ref: AdoptionsTable
+      Events:
+        GetAdoptionsApi:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: PetsAPI
+            Path: /adoptions
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+    Metadata:
+      SamResourceId: GetAdoptionsLambda
+  GetAdoptionLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetAdoptionLambda
+      Handler: getAdoption.lambda_handler
+      Runtime: python3.10
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          ADOPTIONS_TABLE:
+            Ref: AdoptionsTable
+      Events:
+        GetAdoptionApi:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: PetsAPI
+            Path: /adoptions/{id}
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+    Metadata:
+      SamResourceId: GetAdoptionLambda
+  CreateAdoptionLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: CreateAdoptionLambda
+      Handler: createAdoption.lambda_handler
+      Runtime: python3.10
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          ADOPTIONS_TABLE:
+            Ref: AdoptionsTable
+      Events:
+        CreateAdoptionApi:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: PetsAPI
+            Path: /adoptions
+            Method: post
+    Metadata:
+      SamResourceId: CreateAdoptionLambda
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: pets-app
+      UsernameAttributes:
+      - email
+      UsernameConfiguration:
+        CaseSensitive: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      AutoVerifiedAttributes:
+      - email
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+        - Name: verified_email
+          Priority: 1
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: pets-app-client
+      UserPoolId:
+        Ref: CognitoUserPool
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      ExplicitAuthFlows:
+      - ALLOW_REFRESH_TOKEN_AUTH
+      - ALLOW_USER_SRP_AUTH
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+      - implicit
+      AllowedOAuthScopes:
+      - email
+      - openid
+      - aws.cognito.signin.user.admin
+      CallbackURLs:
+      - http://localhost:8081/preview
+      LogoutURLs:
+      - http://localhost:8081/preview
+      SupportedIdentityProviders:
+      - COGNITO
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain:
+        Fn::Sub: pets-app-user-pool-${AWS::AccountId}-ah
+      UserPoolId:
+        Ref: CognitoUserPool
+  GenerateReportDataLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GenerateReportDataLambda
+      Handler: generateReportData.lambda_handler
+      Runtime: python3.10
+      Architectures:
+      - x86_64
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+      Environment:
+        Variables:
+          PETS_TABLE:
+            Ref: PetsTable
+          PETS_INTEREST_TABLE:
+            Ref: PetsInterestTable
+    Metadata:
+      SamResourceId: GenerateReportDataLambda
+  GenerateHTMLLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GenerateHTMLLambda
+      Handler: generateHtml.lambda_handler
+      Runtime: python3.10
+      Architectures:
+      - x86_64
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+    Metadata:
+      SamResourceId: GenerateHTMLLambda
+  GeneratePresignedUrlLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GeneratePresignedUrlLambda
+      Handler: generatePresignedUrl.lambda_handler
+      Runtime: python3.10
+      Architectures:
+      - x86_64
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+    Metadata:
+      SamResourceId: GeneratePresignedUrlLambda
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: EmailReport
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn:
+        Ref: SNSTopic
+      Protocol: email
+      Endpoint: ash.hari12345@gmail.com
+  StateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+      DefinitionSubstitutions:
+        GenerateReportDataArn:
+          Fn::GetAtt:
+          - GenerateReportDataLambda
+          - Arn
+        GenerateHTMLArn:
+          Fn::GetAtt:
+          - GenerateHTMLLambda
+          - Arn
+        GeneratePresignedURLArn:
+          Fn::GetAtt:
+          - GeneratePresignedUrlLambda
+          - Arn
+        SNSTopicArn:
+          Ref: SNSTopic
+      Definition:
+        Comment: State machine to generate an Email with a Report about adoption interest
+          for pets at the shelter
+        StartAt: GenerateReportData
+        States:
+          GenerateReportData:
+            Type: Task
+            Resource: ${GenerateReportDataArn}
+            Next: GenerateHTML
+          GenerateHTML:
+            Type: Task
+            Resource: ${GenerateHTMLArn}
+            Next: GeneratePresignedURL
+          GeneratePresignedURL:
+            Type: Task
+            Resource: ${GeneratePresignedURLArn}
+            Next: TriggerSNS
+          TriggerSNS:
+            Type: Task
+            Resource: arn:aws:states:::sns:publish
+            Parameters:
+              TopicArn:
+                Ref: SNSTopic
+              Message.$: $.presigned_url_str
+            End: true
+  CreateReportLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: CreateReportLambda
+      Handler: createReport.lambda_handler
+      Runtime: python3.10
+      Architectures:
+      - x86_64
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/LambdaApplicationRoleSam
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN:
+            Fn::GetAtt:
+            - StateMachine
+            - Arn
+      Events:
+        CreateReport:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: PetsAPI
+            Path: /create-report
+            Method: post
+    Metadata:
+      SamResourceId: CreateReportLambda
+Outputs:
+  PetsAPI:
+    Description: API Gateway endpoint URL for Prod stage
+    Value:
+      Fn::Sub: https://${PetsAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod
+  GetPetsAPIEndpoint:
+    Description: API Gateway endpoint URL for Prod stage for Get Pets function
+    Value:
+      Fn::Sub: https://${PetsAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/pets/
+  GetAdoptionsAPIEndpoint:
+    Description: API Gateway endpoint URL for Prod stage for GetAdoptions function
+    Value:
+      Fn::Sub: https://${PetsAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/adoptions/
+  GetAdoptionAPIEndpoint:
+    Description: API Gateway endpoint URL for Prod stage for GetAdoption function
+    Value:
+      Fn::Sub: https://${PetsAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/adoptions/{id}
+  CreateAdoptionAPIEndpoint:
+    Description: API Gateway endpoint URL for Prod stage for CreateAdoption function
+    Value:
+      Fn::Sub: https://${PetsAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/adoptions/
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value:
+      Ref: CognitoUserPool
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value:
+      Ref: CognitoUserPoolClient
+  CognitoUserPoolDomain:
+    Description: Cognito User Pool Domain
+    Value:
+      Ref: CognitoUserPoolDomain
+  StateMachineArn:
+    Description: Step Functions state machine arn for email report
+    Value:
+      Fn::GetAtt:
+      - StateMachine
+      - Arn
+  EndpointForCreateReport:
+    Description: API Gateway endpoint URL for Prod stage for Create Report
+    Value:
+      Fn::Sub: https://${PetsAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/create-report

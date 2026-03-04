@@ -17,10 +17,11 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
-s3_prefix = "ticks"
+s3_prefix = "pretty"
 image_repositories = []
-stack_name = "ticks"
-region = "us-west-2"
+stack_name = "pretty"
+region = "ap-south-1"
+disable_rollback = true
 
 [default.package.parameters]
 resolve_s3 = true
